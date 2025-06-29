@@ -29,6 +29,10 @@ type People {
   type Mutation {
     addPerson(firstName: String!, lastName: String!): People!
     addCar(year: String!, make: String!, model: String!, price: String!, personId: ID!): Car!
+    editPerson(id: ID!, firstName: String!, lastName: String!): People!
+    deletePerson(id: ID!): People!
+    editCar(id: ID!, year: String!, make: String!, model: String!, price: String!, personId: ID!): Car!
+    deleteCar(id: ID!): Car!
   }`;
 
 
@@ -136,12 +140,49 @@ const resolvers = {
     addPerson: (_, { firstName, lastName }) => {
       const newPerson = { id: uuidv4(), firstName, lastName };
       people.push(newPerson);
+      console.log('New person added:', newPerson);
+      console.log('All people:', people);
       return newPerson;
     },
     addCar: (_, { year, make, model, price, personId }) => {
       const newCar = { id: uuidv4(), year, make, model, price, personId };
       cars.push(newCar);
+      console.log('New car added:', newCar);
+      console.log('All cars:', cars);
       return newCar;
+    },
+    editPerson: (_, { id, firstName, lastName }) => {
+      const person = people.find(person => person.id === id);
+      if (!person) throw new Error('Person not found');
+      person.firstName = firstName;
+      person.lastName = lastName;
+      return person;
+    },
+    deletePerson: (_, { id }) => {
+      const index = people.findIndex(person => person.id === id);
+      if (index === -1) throw new Error('Person not found');
+      const deletedPerson = people.splice(index, 1)[0];
+      return deletedPerson;
+    },
+    editCar: (_, { id, year, make, model, price, personId }) => {
+      const car = cars.find(car => car.id === id);
+      if (!car) throw new Error('Car not found');
+      car.year = year;
+      car.make = make;
+      car.model = model;
+      car.price = price;
+      car.personId = personId;
+      console.log('Car updated:', car);
+      console.log('All cars:', cars);
+      return car;
+    },
+    deleteCar: (_, { id }) => {
+      const index = cars.findIndex(car => car.id === id);
+      if (index === -1) throw new Error('Car not found');
+      const deletedCar = cars.splice(index, 1)[0];
+      console.log('Car deleted:', deletedCar);
+      console.log('All cars:', cars);
+      return deletedCar;
     }
   }
 }

@@ -1,5 +1,5 @@
 import { useMutation } from '@apollo/client';
-import { ADD_PERSON } from '../../App';
+import { ADD_PERSON } from '../../graphql/queries';
 import { useState } from 'react';
 
 function AddPerson() {
@@ -7,17 +7,28 @@ function AddPerson() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        addPerson({ variables: { firstName: firstName, lastName: lastName } });
+        try {
+            await addPerson({ 
+                variables: { firstName: firstName, lastName: lastName },
+                refetchQueries: ['GetPeople']
+            });
+            setFirstName('');
+            setLastName('');
+        } catch (error) {
+            console.error('Error adding person:', error);
+        }
     }
   return (
     <>
     <h2>Add Person</h2>
-    <form>
-        <input type="text" placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-        <input type="text" placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-        <button type="submit" onClick={handleSubmit}>Add Person</button>
+    <form onSubmit={handleSubmit}>
+        <label>First Name: </label>
+        <input type="text" placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+        <label>Last Name: </label>
+        <input type="text" placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+        <button type="submit">Add Person</button>
     </form>
     </>
   );

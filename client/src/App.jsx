@@ -5,29 +5,11 @@ import './App.css'
 import { useQuery, gql } from '@apollo/client';
 import AddCar from './components/forms/AddCar';
 import AddPerson from './components/forms/AddPerson';
-
-const GET_PEOPLE = gql`
-  query GetPeople {
-    people {
-      id
-      firstName
-      lastName
-    }
-  }
-`;
-
-export const ADD_PERSON = gql`
-  mutation AddPerson($firstName: String!, $lastName: String!) {
-    addPerson(firstName: $firstName, lastName: $lastName) {
-      id
-    }
-  }
-`;
+import { GET_PEOPLE } from './graphql/queries';
+import PersonCards from './components/listItems/PersonCards';
 
 function App() {
 const { loading, error, data } = useQuery(GET_PEOPLE);
-
-console.log(data);
 
 if (loading) return <p>Loading...</p>;
 if (error) return <p>Error: {error.message}</p>;
@@ -38,7 +20,7 @@ if (error) return <p>Error: {error.message}</p>;
       <div>
         <AddPerson />
         <AddCar />
-        
+        <PersonCards />
       </div>
     </>
   )
