@@ -1,125 +1,185 @@
-import { useQuery, useMutation } from '@apollo/client';
-import { useOptimistic } from 'react';
-import { GET_CARS, EDIT_CAR, DELETE_CAR } from '../../graphql/queries';
+import { useQuery, useMutation, useApolloClient } from '@apollo/client';
+import { EDIT_CAR, DELETE_CAR, GET_PEOPLE } from '../../graphql/queries';
 import { useState } from 'react';
+import { Card, Button, Space, Typography, Input, Form, Select } from 'antd';
+
+const { Text } = Typography;
 
 function CarCards({ personId, personName }) {
-    const { data, loading, error } = useQuery(GET_CARS);
+    const { data: peopleData, loading, error } = useQuery(GET_PEOPLE);
     const [editCar] = useMutation(EDIT_CAR);
     const [deleteCar] = useMutation(DELETE_CAR);
     const [editingId, setEditingId] = useState(null);
-    const [year, setYear] = useState('');
-    const [make, setMake] = useState('');
-    const [model, setModel] = useState('');
-    const [price, setPrice] = useState('');
+    const [form] = Form.useForm();
+    const client = useApolloClient();
+
+    const currentPerson = peopleData?.people?.find(person => person.id === personId);
+    const currentCars = currentPerson?.cars || [];
     
-    const [optimisticCars, addOptimisticCars] = useOptimistic(
-        data?.cars || [],
-        (state, newCar) => {
-            if (newCar.type === 'edit') {
-                return state.map(car => 
-                    car.id === newCar.id 
-                        ? { ...car, year: newCar.year, make: newCar.make, model: newCar.model, price: newCar.price }
-                        : car
-                );
-            } else if (newCar.type === 'delete') {
-                return state.filter(car => car.id !== newCar.id);
-            }
-            return state;
-        }
-    );
+    const displayCars = currentCars || [];
     
-    // データが読み込まれていない場合は楽観的更新を使用しない
-    const displayCars = data?.cars ? optimisticCars : [];
-    
-    // 特定の人の車のみをフィルタリング
-    const personCars = displayCars.filter(car => car.personId === personId);
+    const formatCurrency = (price) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD'
+        }).format(parseFloat(price));
+    };
     
     if (loading) return <p>Loading cars...</p>;
     if (error) return <p>Error loading cars: {error.message}</p>;
     
     return (
         <div>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {personCars.map((car) => (
-                        <li key={car.id}>
+            <h4>Cars</h4>
+            {displayCars.length === 0 ? (
+                <Text type="secondary">No cars owned by this person.</Text>
+            ) : (
+                <div style={{ display: 'grid', gap: '8px' }}>
+                    {displayCars.map((car) => (
+                        <Card key={car.id} size="small">
                             {editingId === car.id ? (
-                                <div>
-                                    <input 
-                                        type="text" 
-                                        value={year} 
-                                        onChange={(e) => setYear(e.target.value)}
-                                        placeholder={car.year}
-                                    />
-                                    <input 
-                                        type="text" 
-                                        value={make} 
-                                        onChange={(e) => setMake(e.target.value)}
-                                        placeholder={car.make}
-                                    />
-                                    <input 
-                                        type="text" 
-                                        value={model} 
-                                        onChange={(e) => setModel(e.target.value)}
-                                        placeholder={car.model}
-                                    />
-                                    <input 
-                                        type="text" 
-                                        value={price} 
-                                        onChange={(e) => setPrice(e.target.value)}
-                                        placeholder={car.price}
-                                    />
-                                    <button onClick={() => {
+                                <Form
+                                    form={form}
+                                    layout="inline"
+                                    onFinish={(values) => {
                                         const updatedCar = {
                                             type: 'edit',
                                             id: car.id,
-                                            year: year || car.year,
-                                            make: make || car.make,
-                                            model: model || car.model,
-                                            price: price || car.price
+                                            year: values.year || car.year,
+                                            make: values.make || car.make,
+                                            model: values.model || car.model,
+                                            price: values.price || car.price,
+                                            personId: values.personId || car.personId
                                         };
-                                        addOptimisticCars(updatedCar);
+                                        
+                                        const existingPeople = client.readQuery({ query: GET_PEOPLE });
+                                        if (existingPeople) {
+                                            const updatedPeople = existingPeople.people.map(person => ({
+                                                ...person,
+                                                cars: person.cars.map(c => 
+                                                    c.id === car.id ? { ...c, ...updatedCar } : c
+                                                )
+                                            }));
+                                            client.writeQuery({
+                                                query: GET_PEOPLE,
+                                                data: { people: updatedPeople }
+                                            });
+                                        }
                                         editCar({ 
                                             variables: { 
                                                 id: car.id, 
-                                                year: year || car.year,
-                                                make: make || car.make,
-                                                model: model || car.model,
-                                                price: price || car.price,
-                                                personId: car.personId // 所有者は変更しない
+                                                year: values.year || car.year,
+                                                make: values.make || car.make,
+                                                model: values.model || car.model,
+                                                price: values.price || car.price,
+                                                personId: values.personId || car.personId
                                             },
-                                            refetchQueries: ['GetCars']
+                                            update: (cache, { data }) => {
+                                                const existingPeople = cache.readQuery({ query: GET_PEOPLE });
+                                                if (existingPeople) {
+                                                    const updatedPeople = existingPeople.people.map(person => ({
+                                                        ...person,
+                                                        cars: person.cars.map(c => 
+                                                            c.id === car.id ? data.editCar : c
+                                                        )
+                                                    }));
+                                                    cache.writeQuery({
+                                                        query: GET_PEOPLE,
+                                                        data: { people: updatedPeople }
+                                                    });
+                                                }
+                                            }
                                         });
                                         setEditingId(null);
-                                        setYear('');
-                                        setMake('');
-                                        setModel('');
-                                        setPrice('');
-                                    }}>Save</button>
-                                    <button onClick={() => {
-                                        setEditingId(null);
-                                        setYear('');
-                                        setMake('');
-                                        setModel('');
-                                        setPrice('');
-                                    }}>Cancel</button>
-                                </div>
+                                        form.resetFields();
+                                    }}
+                                    initialValues={{
+                                        year: car.year,
+                                        make: car.make,
+                                        model: car.model,
+                                        price: car.price,
+                                        personId: car.personId
+                                    }}
+                                >
+                                    <Form.Item name="year" rules={[{ required: true }]}>
+                                        <Input placeholder="Year" style={{ width: '80px' }} />
+                                    </Form.Item>
+                                    <Form.Item name="make" rules={[{ required: true }]}>
+                                        <Input placeholder="Make" style={{ width: '100px' }} />
+                                    </Form.Item>
+                                    <Form.Item name="model" rules={[{ required: true }]}>
+                                        <Input placeholder="Model" style={{ width: '120px' }} />
+                                    </Form.Item>
+                                    <Form.Item name="price" rules={[{ required: true }]}>
+                                        <Input placeholder="Price" style={{ width: '100px' }} />
+                                    </Form.Item>
+                                    <Form.Item name="personId" rules={[{ required: true }]}>
+                                        <Select
+                                            style={{ width: '150px' }}
+                                            placeholder="Select owner"
+                                        >
+                                            {peopleData?.people?.map((person) => (
+                                                <Select.Option key={person.id} value={person.id}>
+                                                    {person.firstName} {person.lastName}
+                                                </Select.Option>
+                                            ))}
+                                        </Select>
+                                    </Form.Item>
+                                    <Form.Item>
+                                        <Space>
+                                            <Button type="primary" htmlType="submit" size="small">Save</Button>
+                                            <Button onClick={() => {
+                                                setEditingId(null);
+                                                form.resetFields();
+                                            }} size="small">Cancel</Button>
+                                        </Space>
+                                    </Form.Item>
+                                </Form>
                             ) : (
-                                <div>
-                                    {`${car.year} ${car.make} ${car.model} -> $${car.price}`}
-                                    <button onClick={() => setEditingId(car.id)}>Edit</button>
-                                    <button onClick={() => {
-                                        addOptimisticCars({ type: 'delete', id: car.id });
-                                        deleteCar({ 
-                                            variables: { id: car.id },
-                                            refetchQueries: ['GetCars']
-                                        });
-                                    }}>Delete</button>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <Text strong>{car.year} {car.make} {car.model}</Text>
+                                        <br />
+                                        <Text type="secondary">{formatCurrency(car.price)}</Text>
+                                    </div>
+                                    <Space>
+                                        <Button size="small" onClick={() => setEditingId(car.id)}>Edit</Button>
+                                        <Button size="small" danger onClick={() => {
+                                            const existingPeople = client.readQuery({ query: GET_PEOPLE });
+                                            if (existingPeople) {
+                                                const updatedPeople = existingPeople.people.map(person => ({
+                                                    ...person,
+                                                    cars: person.cars.filter(c => c.id !== car.id)
+                                                }));
+                                                client.writeQuery({
+                                                    query: GET_PEOPLE,
+                                                    data: { people: updatedPeople }
+                                                });
+                                            }
+                                            deleteCar({ 
+                                                variables: { id: car.id },
+                                                update: (cache, { data }) => {
+                                                    const existingPeople = cache.readQuery({ query: GET_PEOPLE });
+                                                    if (existingPeople) {
+                                                        const updatedPeople = existingPeople.people.map(person => ({
+                                                            ...person,
+                                                            cars: person.cars.filter(c => c.id !== car.id)
+                                                        }));
+                                                        cache.writeQuery({
+                                                            query: GET_PEOPLE,
+                                                            data: { people: updatedPeople }
+                                                        });
+                                                    }
+                                                }
+                                            });
+                                        }}>Delete</Button>
+                                    </Space>
                                 </div>
                             )}
-                        </li>
-                    ))} 
-                </ul>
+                        </Card>
+                    ))}
+                </div>
+            )}
         </div>
     )
 }

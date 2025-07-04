@@ -1,117 +1,144 @@
-import { useQuery, useMutation } from '@apollo/client';
-import { useOptimistic } from 'react';
+import { useQuery, useMutation, useApolloClient } from '@apollo/client';
 import { GET_PEOPLE, EDIT_PERSON, DELETE_PERSON } from '../../graphql/queries';
-import { GET_CARS } from '../../graphql/queries';
 import { useState } from 'react';
-import { Card } from 'antd';
+import { Card, Button, Space, Typography, Input, Form } from 'antd';
+import { Link } from 'react-router-dom';
 import CarCards from './CarCards';
+
+const { Text, Title } = Typography;
 
 function PersonCards() {
     const { data, loading, error } = useQuery(GET_PEOPLE);
-    const { data: carsData, loading: carsLoading, error: carsError } = useQuery(GET_CARS);
     const [editPerson] = useMutation(EDIT_PERSON);
     const [deletePerson] = useMutation(DELETE_PERSON);
     const [editingId, setEditingId] = useState(null);
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
+    const [form] = Form.useForm();
+    const client = useApolloClient();
     
-    const [optimisticPeople, addOptimisticPeople] = useOptimistic(
-        data?.people || [],
-        (state, newPerson) => {
-            if (newPerson.type === 'edit') {
-                return state.map(person => 
-                    person.id === newPerson.id 
-                        ? { ...person, firstName: newPerson.firstName, lastName: newPerson.lastName }
-                        : person
-                );
-            } else if (newPerson.type === 'delete') {
-                return state.filter(person => person.id !== newPerson.id);
-            }
-            return state;
-        }
-    );
+    const displayPeople = data?.people || [];
     
-    // データが読み込まれていない場合は楽観的更新を使用しない
-    const displayPeople = data?.people ? optimisticPeople : [];
-    
-    console.log('People data:', data);
-    console.log('Cars data:', carsData);
-    
-    if (loading || carsLoading) return <p>Loading...</p>;
+    if (loading) return <p>Loading...</p>;
     if (error) return <p>Error loading people: {error.message}</p>;
-    if (carsError) return <p>Error loading cars: {carsError.message}</p>;
     if (!data || !data.people) return <p>No people data available</p>;
-    if (!carsData || !carsData.cars) return <p>No cars data available</p>;
-    
-    const getCarCount = (personId) => {
-        return carsData.cars.filter(car => car.personId === personId).length;
-    };
     
     return (
         <div>
-            <h2>Person Cards</h2>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <h2>People</h2>
+            <div style={{ display: 'grid', gap: '16px' }}>
                 {displayPeople.map((person) => (
-                    <li key={person.id}>
-                        <Card style={{ marginBottom: 16 }}>
-                            {editingId === person.id ? (
-                                <div>
-                                    <input 
-                                        type="text" 
-                                        value={firstName} 
-                                        onChange={(e) => setFirstName(e.target.value)}
-                                        placeholder={person.firstName}
-                                    />
-                                    <input 
-                                        type="text" 
-                                        value={lastName} 
-                                        onChange={(e) => setLastName(e.target.value)}
-                                        placeholder={person.lastName}
-                                    />
-                                    <button onClick={() => {
-                                        const updatedPerson = {
-                                            type: 'edit',
-                                            id: person.id,
-                                            firstName: firstName || person.firstName,
-                                            lastName: lastName || person.lastName
-                                        };
-                                        addOptimisticPeople(updatedPerson);
-                                        editPerson({ 
-                                            variables: { 
-                                                id: person.id, 
-                                                firstName: firstName || person.firstName, 
-                                                lastName: lastName || person.lastName 
-                                            },
-                                            refetchQueries: ['GetPeople']
+                    <Card key={person.id} style={{ marginBottom: 16 }}>
+                        {editingId === person.id ? (
+                            <Form
+                                form={form}
+                                layout="inline"
+                                onFinish={(values) => {
+                                    const updatedPerson = {
+                                        id: person.id,
+                                        firstName: values.firstName || person.firstName,
+                                        lastName: values.lastName || person.lastName
+                                    };
+                                    
+                                    const existingPeople = client.readQuery({ query: GET_PEOPLE });
+                                    if (existingPeople) {
+                                        const updatedPeople = existingPeople.people.map(p => 
+                                            p.id === person.id ? { ...p, ...updatedPerson } : p
+                                        );
+                                        client.writeQuery({
+                                            query: GET_PEOPLE,
+                                            data: { people: updatedPeople }
                                         });
-                                        setEditingId(null);
-                                        setFirstName('');
-                                        setLastName('');
-                                    }}>Save</button>
-                                    <button onClick={() => {
-                                        setEditingId(null);
-                                        setFirstName('');
-                                        setLastName('');
-                                    }}>Cancel</button>
+                                    }
+                                    
+                                    editPerson({ 
+                                        variables: { 
+                                            id: person.id, 
+                                            firstName: values.firstName || person.firstName, 
+                                            lastName: values.lastName || person.lastName 
+                                        },
+                                        update: (cache, { data }) => {
+                                            const existingPeople = cache.readQuery({ query: GET_PEOPLE });
+                                            if (existingPeople) {
+                                                const updatedPeople = existingPeople.people.map(p => 
+                                                    p.id === person.id ? data.editPerson : p
+                                                );
+                                                cache.writeQuery({
+                                                    query: GET_PEOPLE,
+                                                    data: { people: updatedPeople }
+                                                });
+                                            }
+                                        }
+                                    });
+                                    setEditingId(null);
+                                    form.resetFields();
+                                }}
+                                initialValues={{
+                                    firstName: person.firstName,
+                                    lastName: person.lastName
+                                }}
+                            >
+                                <Form.Item name="firstName" rules={[{ required: true }]}>
+                                    <Input placeholder="First Name" />
+                                </Form.Item>
+                                <Form.Item name="lastName" rules={[{ required: true }]}>
+                                    <Input placeholder="Last Name" />
+                                </Form.Item>
+                                <Form.Item>
+                                    <Space>
+                                        <Button type="primary" htmlType="submit">Save</Button>
+                                        <Button onClick={() => {
+                                            setEditingId(null);
+                                            form.resetFields();
+                                        }}>Cancel</Button>
+                                    </Space>
+                                </Form.Item>
+                            </Form>
+                        ) : (
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <Title level={4} style={{ margin: 0 }}>
+                                        {person.firstName} {person.lastName}
+                                    </Title>
+                                    <Space>
+                                        <Button onClick={() => setEditingId(person.id)}>Edit</Button>
+                                        <Button danger onClick={() => {
+                                            const existingPeople = client.readQuery({ query: GET_PEOPLE });
+                                            if (existingPeople) {
+                                                const updatedPeople = existingPeople.people.filter(p => p.id !== person.id);
+                                                client.writeQuery({
+                                                    query: GET_PEOPLE,
+                                                    data: { people: updatedPeople }
+                                                });
+                                            }
+                                            
+                                            deletePerson({ 
+                                                variables: { id: person.id },
+                                                update: (cache, { data }) => {
+                                                    const existingPeople = cache.readQuery({ query: GET_PEOPLE });
+                                                    if (existingPeople) {
+                                                        const updatedPeople = existingPeople.people.filter(p => p.id !== person.id);
+                                                        cache.writeQuery({
+                                                            query: GET_PEOPLE,
+                                                            data: { people: updatedPeople }
+                                                        });
+                                                    }
+                                                }
+                                            });
+                                        }}>Delete</Button>
+                                    </Space>
                                 </div>
-                            ) : (
-                                <div>
-                                    {person.firstName} {person.lastName}
-                                    <button onClick={() => setEditingId(person.id)}>Edit</button>
-                                    <button onClick={() => {
-                                        addOptimisticPeople({ type: 'delete', id: person.id });
-                                        deletePerson({ 
-                                            variables: { id: person.id },
-                                            refetchQueries: ['GetPeople']
-                                        });
-                                    }}>Delete</button>
-                                    <CarCards personId={person.id} personName={`${person.firstName} ${person.lastName}`} />
+                                
+                                <div style={{ marginBottom: '16px' }}>
+                                    <Link to={`/people/${person.id}`}>
+                                        <Text type="link">LEARN MORE</Text>
+                                    </Link>
                                 </div>
-                            )}
-                        </Card>
-                    </li>
+                                
+                                <CarCards personId={person.id} personName={`${person.firstName} ${person.lastName}`} />
+                            </div>
+                        )}
+                    </Card>
                 ))} 
-            </ul>
+            </div>
         </div>
     )
 }

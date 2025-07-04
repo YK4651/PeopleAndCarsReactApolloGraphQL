@@ -24,6 +24,7 @@ type People {
     people: [People!]
     cars: [Car!]
     person(id: ID!): People
+    personWithCars(id: ID!): People
   }
 
   type Mutation {
@@ -134,7 +135,14 @@ const resolvers = {
   Query: {
     people: () => people,
     cars: () => cars,
-    person: (_, { id }) => people.find(person => person.id === id)
+    person: (_, { id }) => people.find(person => person.id === id),
+    personWithCars: (_, { id }) => people.find(person => person.id === id)
+  },
+  People: {
+    cars: (parent) => cars.filter(car => car.personId === parent.id)
+  },
+  Car: {
+    owner: (parent) => people.find(person => person.id === parent.personId)
   },
   Mutation: {
     addPerson: (_, { firstName, lastName }) => {
@@ -162,6 +170,18 @@ const resolvers = {
       const index = people.findIndex(person => person.id === id);
       if (index === -1) throw new Error('Person not found');
       const deletedPerson = people.splice(index, 1)[0];
+      
+      const carIndices = [];
+      cars.forEach((car, index) => {
+        if (car.personId === id) {
+          carIndices.push(index);
+        }
+      });
+      
+      for (let i = carIndices.length - 1; i >= 0; i--) {
+        cars.splice(carIndices[i], 1);
+      }
+      
       return deletedPerson;
     },
     editCar: (_, { id, year, make, model, price, personId }) => {

@@ -1,37 +1,97 @@
-import { useMutation } from '@apollo/client';
-import { ADD_PERSON } from '../../graphql/queries';
+import { useMutation, useApolloClient } from '@apollo/client';
+import { ADD_PERSON, GET_PEOPLE } from '../../graphql/queries';
 import { useState } from 'react';
+import { Form, Input, Button, Card, Typography } from 'antd';
+
+const { Title } = Typography;
 
 function AddPerson() {
     const [addPerson] = useMutation(ADD_PERSON);
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
+    const [form] = Form.useForm();
+    const client = useApolloClient();
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (values) => {
+        const tempId = `temp-${Date.now()}`;
+        const tempPerson = {
+            id: tempId,
+            firstName: values.firstName,
+            lastName: values.lastName,
+            cars: [],
+            __typename: 'People'
+        };
+
         try {
+            const existingPeople = client.readQuery({ query: GET_PEOPLE });
+            if (existingPeople) {
+                client.writeQuery({
+                    query: GET_PEOPLE,
+                    data: {
+                        people: [...existingPeople.people, tempPerson]
+                    }
+                });
+            }
+
             await addPerson({ 
-                variables: { firstName: firstName, lastName: lastName },
-                refetchQueries: ['GetPeople']
+                variables: { firstName: values.firstName, lastName: values.lastName },
+                update: (cache, { data }) => {
+                    const existingPeople = cache.readQuery({ query: GET_PEOPLE });
+                    if (existingPeople) {
+                        cache.writeQuery({
+                            query: GET_PEOPLE,
+                            data: {
+                                people: existingPeople.people.map(person => 
+                                    person.id === tempId ? data.addPerson : person
+                                )
+                            }
+                        });
+                    }
+                }
             });
-            setFirstName('');
-            setLastName('');
+            form.resetFields();
         } catch (error) {
             console.error('Error adding person:', error);
+            const existingPeople = client.readQuery({ query: GET_PEOPLE });
+            if (existingPeople) {
+                client.writeQuery({
+                    query: GET_PEOPLE,
+                    data: {
+                        people: existingPeople.people.filter(person => person.id !== tempId)
+                    }
+                });
+            }
         }
     }
-  return (
-    <>
-    <h2>Add Person</h2>
-    <form onSubmit={handleSubmit}>
-        <label>First Name: </label>
-        <input type="text" placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-        <label>Last Name: </label>
-        <input type="text" placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-        <button type="submit">Add Person</button>
-    </form>
-    </>
-  );
+
+    return (
+        <Card>
+            <Title level={3}>Add Person</Title>
+            <Form
+                form={form}
+                layout="vertical"
+                onFinish={handleSubmit}
+            >
+                <Form.Item 
+                    name="firstName" 
+                    label="First Name"
+                    rules={[{ required: true, message: 'Please enter first name' }]}
+                >
+                    <Input placeholder="First Name" />
+                </Form.Item>
+                <Form.Item 
+                    name="lastName" 
+                    label="Last Name"
+                    rules={[{ required: true, message: 'Please enter last name' }]}
+                >
+                    <Input placeholder="Last Name" />
+                </Form.Item>
+                <Form.Item>
+                    <Button type="primary" htmlType="submit" block>
+                        Add Person
+                    </Button>
+                </Form.Item>
+            </Form>
+        </Card>
+    );
 }
 
 export default AddPerson;

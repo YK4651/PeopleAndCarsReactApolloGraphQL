@@ -1,29 +1,19 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import { useQuery, gql } from '@apollo/client';
-import AddCar from './components/forms/AddCar';
-import AddPerson from './components/forms/AddPerson';
-import { GET_PEOPLE } from './graphql/queries';
-import PersonCards from './components/listItems/PersonCards';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import './App.css';
+import HomePage from './components/HomePage';
+import PersonShowPage from './components/PersonShowPage';
 
 function App() {
-const { loading, error, data } = useQuery(GET_PEOPLE);
-
-if (loading) return <p>Loading...</p>;
-if (error) return <p>Error: {error.message}</p>;
-
   return (
-    <>
-    <h1>People & Cars</h1>
-      <div>
-        <AddPerson />
-        <AddCar />
-        <PersonCards />
+    <Router>
+      <div className="App">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/people/:id" element={<PersonShowPage />} />
+        </Routes>
       </div>
-    </>
-  )
+    </Router>
+  );
 }
 
 export default App

@@ -6,6 +6,14 @@ export const GET_PEOPLE = gql`
       id
       firstName
       lastName
+      cars {
+        id
+        year
+        make
+        model
+        price
+        personId
+      }
     }
   }
 `;
@@ -68,6 +76,24 @@ export const DELETE_CAR = gql`
   mutation DeleteCar($id: ID!) {
     deleteCar(id: $id) {
       id
+    }
+  }
+`;
+
+export const GET_PERSON_WITH_CARS = gql`
+  query GetPersonWithCars($id: ID!) {
+    personWithCars(id: $id) {
+      id
+      firstName
+      lastName
+      cars {
+        id
+        year
+        make
+        model
+        price
+        personId
+      }
     }
   }
 `;
